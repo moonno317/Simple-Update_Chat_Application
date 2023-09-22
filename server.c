@@ -2,114 +2,79 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <arpa/inet.h>
 #include <sys/socket.h>
-#include <pthread.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
-#define PORT 8888
+#define SERVER_PORT 8888
 #define BUFFER_SIZE 1024
 
-typedef struct {
-    int clientSocket;
+int main() {
+    // Create a socket
+    int serverSocket = socket(AF_INET, SOCK_STREAM, 0);
+    if (serverSocket == -1) {
+        perror("Socket creation failed");
+        exit(1);
+    }
+
+    // Set up the server address
+    struct sockaddr_in serverAddress;
+    serverAddress.sin_family = AF_INET;
+    serverAddress.sin_addr.s_addr = INADDR_ANY;
+    serverAddress.sin_port = htons(SERVER_PORT);
+
+    // Bind the socket to the specified address and port
+    if (bind(serverSocket, (struct sockaddr*)&serverAddress, sizeof(serverAddress)) == -1) {
+        perror("Binding failed");
+        exit(1);
+    }
+
+    // Listen for client connections
+    if (listen(serverSocket, 1) == -1) {
+        perror("Listening failed");
+        exit(1);
+    }
+
+    printf("Server listening on port %d...\n", SERVER_PORT);
+
+    // Accept client connections
     struct sockaddr_in clientAddress;
-} ClientInfo;
+    socklen_t clientAddressLength = sizeof(clientAddress);
 
-void* handleClient(void* arg) {
-    ClientInfo* clientInfo = (ClientInfo*)arg;
-    int clientSocket = clientInfo->clientSocket;
-    struct sockaddr_in clientAddress = clientInfo->clientAddress;
-    char buffer[BUFFER_SIZE];
+    int clientSocket = accept(serverSocket, (struct sockaddr*)&clientAddress, &clientAddressLength);
+    if (clientSocket == -1) {
+        perror("Accepting failed");
+        exit(1);
+    }
 
-    printf("Client connected: %s:%d\n", inet_ntoa(clientAddress.sin_addr), ntohs(clientAddress.sin_port));
+    printf("Client connected: %s\n", inet_ntoa(clientAddress.sin_addr));
 
+    // Main loop
+    char message[BUFFER_SIZE];
     while (1) {
-        memset(buffer, 0, sizeof(buffer));
-        int bytesRead = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
-        if (bytesRead <= 0) {
-            // Error or connection closed by client
+        // Receive data from the client
+        memset(message, 0, sizeof(message));
+        int bytesRead = recv(clientSocket, message, BUFFER_SIZE - 1, 0);
+        if (bytesRead == -1) {
+            perror("Receiving failed");
+            exit(1);
+        } else if (bytesRead == 0) {
+            printf("Client disconnected\n");
             break;
         }
 
-        printf("Received message from client: %s\n", buffer);
+        printf("Received from client: %s\n", message);
 
-        // Process the received message (you can add your custom logic here)
-
-        // Send response back to the client
-        if (send(clientSocket, buffer, bytesRead, 0) == -1) {
-            perror("Error sending response");
+        // Process the received data (you can perform any desired logic here)
+        // For simplicity, this example just echoes the received message back to the client
+        if (send(clientSocket, message, strlen(message), 0) == -1) {
+            perror("Sending failed");
             exit(1);
         }
     }
 
-    printf("Client disconnected: %s:%d\n", inet_ntoa(clientAddress.sin_addr), ntohs(clientAddress.sin_port));
-
-    // Close client socket
+    // Clean up
     close(clientSocket);
-
-    // Free client info memory
-    free(clientInfo);
-
-    return NULL;
-}
-
-int main() {
-    int serverSocket, clientSocket;
-    struct sockaddr_in serverAddress, clientAddress;
-    socklen_t clientAddressLength;
-    pthread_t threadId;
-    ClientInfo* clientInfo;
-
-    // Create socket
-    serverSocket = socket(AF_INET, SOCK_STREAM, 0);
-    if (serverSocket < 0) {
-        perror("Error creating server socket");
-        exit(1);
-    }
-
-    // Set up server address
-    serverAddress.sin_family = AF_INET;
-    serverAddress.sin_addr.s_addr = INADDR_ANY;
-    serverAddress.sin_port = htons(PORT);
-
-    // Bind socket to server address
-    if (bind(serverSocket, (struct sockaddr*)&serverAddress, sizeof(serverAddress)) < 0) {
-        perror("Error binding socket");
-        exit(1);
-    }
-
-    // Listen for incoming connections
-    if (listen(serverSocket, 5) < 0) {
-        perror("Error listening for connections");
-        exit(1);
-    }
-
-    printf("Server listening on port %d\n", PORT);
-
-    while (1) {
-        // Accept incoming connection
-        clientAddressLength = sizeof(clientAddress);
-        clientSocket = accept(serverSocket, (struct sockaddr*)&clientAddress, &clientAddressLength);
-        if (clientSocket < 0) {
-            perror("Error accepting connection");
-            exit(1);
-        }
-
-        // Create client info structure for passing to the thread
-        clientInfo = (ClientInfo*)malloc(sizeof(ClientInfo));
-        clientInfo->clientSocket = clientSocket;
-        clientInfo->clientAddress = clientAddress;
-
-        // Create a new thread to handle the client connection
-        if (pthread_create(&threadId, NULL, handleClient, (void*)clientInfo) != 0) {
-            perror("Error creating thread");
-            exit(1);
-        }
-
-        // Detach the thread to allow it to run independently
-        pthread_detach(threadId);
-    }
-
-    // Close server socket
     close(serverSocket);
 
     return 0;

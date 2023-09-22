@@ -1,149 +1,139 @@
-#include <ncurses.h>
-#include <string.h>
+#include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
 #include <arpa/inet.h>
-#include <sys/types.h>
-#include <sys/wait.h>
+#include <ncurses.h>
+
+#define SERVER_IP "127.0.0.1"
+#define SERVER_PORT 8888
 #define BUFFER_SIZE 1024
 
-void wrapText(WINDOW* win, int starty, int startx, int width, const char* text) {
-    int len = strlen(text);
-    int currentRow = 0;
-    const char* remainingText = text;
+void wrapText(WINDOW* win, int starty, int startx, int width, const char* str) {
+    int x, y, i;
+    float temp;
 
-    while (len > 0) {
-        int charsToPrint = (len > width) ? width : len;
-        mvwprintw(win, starty + currentRow, startx, "%.*s", charsToPrint, remainingText);
-        len -= charsToPrint;
-        remainingText += charsToPrint;
-        currentRow++; }}
+    temp = (strlen(str) / width) + 1;
+    y = starty;
+    x = startx;
+    for (i = 0; i < temp; i++) {
+        mvwprintw(win, y, x, "%.*s", width - 2, str + i * width);
+        y++;
+    }
+}
 
 int main() {
+    // Initialize ncurses
     initscr();
     cbreak();
     noecho();
     keypad(stdscr, TRUE);
 
-    int terminalHeight, terminalWidth;
-    getmaxyx(stdscr, terminalHeight, terminalWidth);
-
-    int bigBoxHeight = terminalHeight - 5;
-    int bigBoxWidth = terminalWidth - 4;
-    int bigBoxY = 2;
-    int bigBoxX = 2;
+    // Create windows
+    int screenHeight, screenWidth;
+    getmaxyx(stdscr, screenHeight, screenWidth);
 
     int smallBoxHeight = 3;
-    int smallBoxWidth = terminalWidth - 4;
-    int smallBoxY = bigBoxY + bigBoxHeight - 0;
-    int smallBoxX = bigBoxX + 0;
+    int bigBoxHeight = screenHeight - smallBoxHeight - 3;
+    int bigBoxWidth = screenWidth - 4;
 
-    WINDOW* bigBoxWin = newwin(bigBoxHeight, bigBoxWidth, bigBoxY, bigBoxX);
-    WINDOW* smallBoxWin = newwin(smallBoxHeight, smallBoxWidth, smallBoxY, smallBoxX);
+    WINDOW* smallBoxWin = newwin(smallBoxHeight, bigBoxWidth, 1, 2);
+    WINDOW* bigBoxWin = newwin(bigBoxHeight, bigBoxWidth, smallBoxHeight + 2, 2);
 
-    box(bigBoxWin, 0, 0);
     box(smallBoxWin, 0, 0);
+    box(bigBoxWin, 0, 0);
 
     refresh();
+    wrefresh(smallBoxWin);
     wrefresh(bigBoxWin);
-    wrefresh(smallBoxWin);
 
-    wmove(smallBoxWin, 1, 1);
-    wrefresh(smallBoxWin);
+    // Create a socket
+    int clientSocket = socket(AF_INET, SOCK_STREAM, 0);
+    if (clientSocket == -1) {
+        perror("Socket creation failed");
+        exit(1);
+    }
 
-    char input[smallBoxWidth + 1];
-    memset(input, 0, sizeof(input));
+    // Set up the server address
+    struct sockaddr_in serverAddress;
+    serverAddress.sin_family = AF_INET;
+    serverAddress.sin_port = htons(SERVER_PORT);
+    if (inet_pton(AF_INET, SERVER_IP, &(serverAddress.sin_addr)) <= 0) {
+        perror("Invalid address/Address not supported");
+        exit(1);
+    }
+
+    // Connect to the server
+    if (connect(clientSocket, (struct sockaddr*)&serverAddress, sizeof(serverAddress)) == -1) {
+        perror("Connection failed");
+        exit(1);
+    }
+
+    // Main loop
+    char input[BUFFER_SIZE];
+    int ch;
     int inputLength = 0;
 
-    char** buffer = NULL;
-    int bufferSize = 0;
+    while ((ch = getch()) != KEY_F(1)) {
+        if (ch == ERR)
+            continue;
 
-    int ch;
-
-    int clientSocket;
-    struct sockaddr_in serverAddress;
-
-    clientSocket = socket(AF_INET, SOCK_STREAM, 0);
-    if (clientSocket < 0) {
-        perror("Error creating client socket");
-        exit(1); }
-
-    serverAddress.sin_family = AF_INET;
-    serverAddress.sin_port = htons(8888);
-
-    if (inet_pton(AF_INET, "127.0.0.1", &(serverAddress.sin_addr)) <= 0) {
-        perror("Invalid address/ Address not supported");
-        exit(1); }
-
-    if (connect(clientSocket, (struct sockaddr*)&serverAddress, sizeof(serverAddress)) < 0) {
-        perror("Error connecting to the server");
-        exit(1); }
-
-    while ((ch = wgetch(smallBoxWin)) != KEY_F(1)) {
         if (ch == '\n' || ch == '\r') {
             if (inputLength > 0) {
-                // Add the input to the buffer
-                buffer = realloc(buffer, (bufferSize + 1) * sizeof(char*));
-                buffer[bufferSize] = strdup(input);
-                bufferSize++;
+                // Send user input to the server
+                if (send(clientSocket, input, inputLength, 0) == -1) {
+                    perror("Sending failed");
+                    exit(1);
+                }
 
-                memset(input, 0, sizeof(input));
-                inputLength = 0;
-
+                // Clear the small box
                 werase(smallBoxWin);
                 box(smallBoxWin, 0, 0);
                 wrefresh(smallBoxWin);
 
-                werase(bigBoxWin);
-                box(bigBoxWin, 0, 0);
-                for (int i = 0; i < bufferSize; i++) {
-                    wrapText(bigBoxWin, i + 1, 1, bigBoxWidth - 2, buffer[i]); }
-                wrefresh(bigBoxWin);
-
-                if (send(clientSocket, buffer[bufferSize - 1], strlen(buffer[bufferSize - 1]), 0) == -1) {
-                    perror("Sending failed");
-                    exit(1); }
-
+                // Receive and display server's response
                 char message[BUFFER_SIZE];
                 memset(message, 0, sizeof(message));
                 if (recv(clientSocket, message, BUFFER_SIZE - 1, 0) == -1) {
                     perror("Receiving failed");
-                    exit(1); }
-
-                buffer = realloc(buffer, (bufferSize + 1) * sizeof(char*));
-                buffer[bufferSize] = strdup(message);
-                bufferSize++;
+                    exit(1);
+                }
 
                 werase(bigBoxWin);
                 box(bigBoxWin, 0, 0);
-                for (int i = 0; i < bufferSize; i++) {
-                    wrapText(bigBoxWin,i + 1, 1, bigBoxWidth - 2, buffer[i]); }
-                wrefresh(bigBoxWin); }} else if (ch == KEY_BACKSPACE || ch == 127) {
+                wrapText(bigBoxWin, 1, 1, bigBoxWidth - 2, message);
+                wrefresh(bigBoxWin);
+
+                // Reset input buffer
+                memset(input, 0, sizeof(input));
+                inputLength = 0;
+            }
+        } else if (ch == KEY_BACKSPACE || ch == 127) {
             if (inputLength > 0) {
+                input[inputLength - 1] = '\0';
                 inputLength--;
-                input[inputLength] = '\0';
 
-                werase(smallBoxWin);
-                box(smallBoxWin, 0, 0);
-
-                wrapText(smallBoxWin, 1, 1, smallBoxWidth - 2, input);
-                wrefresh(smallBoxWin); }} else {
-            if (inputLength < smallBoxWidth) {
+                mvwprintw(smallBoxWin, 1, 1, "%s", input);
+                wrefresh(smallBoxWin);
+            }
+        } else {
+            if (inputLength < BUFFER_SIZE - 1) {
                 input[inputLength] = ch;
                 inputLength++;
 
-                werase(smallBoxWin);
-                box(smallBoxWin, 0, 0);
+                mvwprintw(smallBoxWin, 1, 1, "%s", input);
+                wrefresh(smallBoxWin);
+            }
+        }
+    }
 
-                wrapText(smallBoxWin, 1, 1, smallBoxWidth - 2, input);
-                wrefresh(smallBoxWin); }}}
-
-    for (int i = 0; i < bufferSize; i++) {
-        free(buffer[i]); }
-    free(buffer);
-
+    // Clean up
+    delwin(smallBoxWin);
+    delwin(bigBoxWin);
+    endwin();
     close(clientSocket);
 
-    endwin();
-
-    return 0; }
+    return 0;
+}
