@@ -8,7 +8,7 @@
 #include <ncurses.h>
 
 #define SERVER_IP "127.0.0.1"
-#define SERVER_PORT 8888
+#define SERVER_PORT 8889
 #define BUFFER_SIZE 1024
 
 void wrapText(WINDOW* win, int starty, int startx, int width, const char* str) {
