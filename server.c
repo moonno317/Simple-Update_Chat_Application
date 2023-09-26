@@ -10,72 +10,55 @@
 #define BUFFER_SIZE 1024
 
 int main() {
-    // Create a socket
     int serverSocket = socket(AF_INET, SOCK_STREAM, 0);
     if (serverSocket == -1) {
         perror("Socket creation failed");
-        exit(1);
-    }
+        exit(1); }
 
-    // Set up the server address
     struct sockaddr_in serverAddress;
     serverAddress.sin_family = AF_INET;
     serverAddress.sin_addr.s_addr = INADDR_ANY;
     serverAddress.sin_port = htons(SERVER_PORT);
 
-    // Bind the socket to the specified address and port
+    
     if (bind(serverSocket, (struct sockaddr*)&serverAddress, sizeof(serverAddress)) == -1) {
         perror("Binding failed");
-        exit(1);
-    }
+        exit(1);}
 
-    // Listen for client connections
+
     if (listen(serverSocket, 1) == -1) {
         perror("Listening failed");
-        exit(1);
-    }
+        exit(1); }
 
     printf("Server listening on port %d...\n", SERVER_PORT);
 
-    // Accept client connections
     struct sockaddr_in clientAddress;
     socklen_t clientAddressLength = sizeof(clientAddress);
 
     int clientSocket = accept(serverSocket, (struct sockaddr*)&clientAddress, &clientAddressLength);
     if (clientSocket == -1) {
         perror("Accepting failed");
-        exit(1);
-    }
+        exit(1); }
 
     printf("Client connected: %s\n", inet_ntoa(clientAddress.sin_addr));
 
-    // Main loop
     char message[BUFFER_SIZE];
     while (1) {
-        // Receive data from the client
         memset(message, 0, sizeof(message));
         int bytesRead = recv(clientSocket, message, BUFFER_SIZE - 1, 0);
         if (bytesRead == -1) {
             perror("Receiving failed");
-            exit(1);
-        } else if (bytesRead == 0) {
+            exit(1); } else if (bytesRead == 0) {
             printf("Client disconnected\n");
-            break;
-        }
+            break; }
 
         printf("Received from client: %s\n", message);
 
-        // Process the received data (you can perform any desired logic here)
-        // For simplicity, this example just echoes the received message back to the client
         if (send(clientSocket, message, strlen(message), 0) == -1) {
             perror("Sending failed");
-            exit(1);
-        }
-    }
+            exit(1); } }
 
-    // Clean up
     close(clientSocket);
     close(serverSocket);
 
-    return 0;
-}
+    return 0; }
