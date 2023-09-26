@@ -20,18 +20,14 @@ void wrapText(WINDOW* win, int starty, int startx, int width, const char* str) {
     x = startx;
     for (i = 0; i < temp; i++) {
         mvwprintw(win, y, x, "%.*s", width - 2, str + i * width);
-        y++;
-    }
-}
+        y++; } }
 
 int main() {
-    // Initialize ncurses
     initscr();
     cbreak();
     noecho();
     keypad(stdscr, TRUE);
 
-    // Create windows
     int screenHeight, screenWidth;
     getmaxyx(stdscr, screenHeight, screenWidth);
 
@@ -49,29 +45,23 @@ int main() {
     wrefresh(smallBoxWin);
     wrefresh(bigBoxWin);
 
-    // Create a socket
     int clientSocket = socket(AF_INET, SOCK_STREAM, 0);
     if (clientSocket == -1) {
         perror("Socket creation failed");
-        exit(1);
-    }
+        exit(1); }
 
-    // Set up the server address
     struct sockaddr_in serverAddress;
     serverAddress.sin_family = AF_INET;
     serverAddress.sin_port = htons(SERVER_PORT);
     if (inet_pton(AF_INET, SERVER_IP, &(serverAddress.sin_addr)) <= 0) {
         perror("Invalid address/Address not supported");
-        exit(1);
-    }
+        exit(1); }
 
-    // Connect to the server
+    
     if (connect(clientSocket, (struct sockaddr*)&serverAddress, sizeof(serverAddress)) == -1) {
         perror("Connection failed");
-        exit(1);
-    }
+        exit(1); }
 
-    // Main loop
     char input[BUFFER_SIZE];
     int ch;
     int inputLength = 0;
@@ -82,58 +72,46 @@ int main() {
 
         if (ch == '\n' || ch == '\r') {
             if (inputLength > 0) {
-                // Send user input to the server
                 if (send(clientSocket, input, inputLength, 0) == -1) {
                     perror("Sending failed");
-                    exit(1);
-                }
+                    exit(1); }
 
-                // Clear the small box
+                
                 werase(smallBoxWin);
                 box(smallBoxWin, 0, 0);
                 wrefresh(smallBoxWin);
 
-                // Receive and display server's response
+                
                 char message[BUFFER_SIZE];
                 memset(message, 0, sizeof(message));
                 if (recv(clientSocket, message, BUFFER_SIZE - 1, 0) == -1) {
                     perror("Receiving failed");
-                    exit(1);
-                }
+                    exit(1); }
 
                 werase(bigBoxWin);
                 box(bigBoxWin, 0, 0);
                 wrapText(bigBoxWin, 1, 1, bigBoxWidth - 2, message);
                 wrefresh(bigBoxWin);
 
-                // Reset input buffer
+                
                 memset(input, 0, sizeof(input));
-                inputLength = 0;
-            }
-        } else if (ch == KEY_BACKSPACE || ch == 127) {
+                inputLength = 0; } } else if (ch == KEY_BACKSPACE || ch == 127) {
             if (inputLength > 0) {
                 input[inputLength - 1] = '\0';
                 inputLength--;
 
                 mvwprintw(smallBoxWin, 1, 1, "%s", input);
-                wrefresh(smallBoxWin);
-            }
-        } else {
+                wrefresh(smallBoxWin); } } else {
             if (inputLength < BUFFER_SIZE - 1) {
                 input[inputLength] = ch;
                 inputLength++;
 
                 mvwprintw(smallBoxWin, 1, 1, "%s", input);
-                wrefresh(smallBoxWin);
-            }
-        }
-    }
+                wrefresh(smallBoxWin); } } }
 
-    // Clean up
     delwin(smallBoxWin);
     delwin(bigBoxWin);
     endwin();
     close(clientSocket);
 
-    return 0;
-}
+    return 0; }
