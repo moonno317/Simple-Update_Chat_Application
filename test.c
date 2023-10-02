@@ -5,7 +5,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include <ncurses.h>awdawdawdawd
+#include <ncurses.h>
 
 #define SERVER_IP "127.0.0.1"
 #define SERVER_PORT 8888
