@@ -3,7 +3,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/socket.h>
-#include <netinet/in.h>
+#include <netinet/in.h>awd
 #include <arpa/inet.h>
 #include <ncurses.h>
 
